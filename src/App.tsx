@@ -12,6 +12,8 @@ import TakeoutPage from './pages/TakeoutPage';
 import ReservationPage from './pages/ReservationPage';
 import SettingsPage from './pages/SettingsPage';
 import CustomerOrderPage from './pages/CustomerOrderPage';
+import KpiDashboardPage from './pages/KpiDashboardPage';
+import LandingPage from './pages/LandingPage';
 import DebugOverlay from './components/common/DebugOverlay';
 import { usePosStore } from './stores/posStore';
 
@@ -69,12 +71,16 @@ function PosLayout() {
 function App() {
   const location = useLocation();
   const isCustomerRoute = location.pathname.startsWith('/customer');
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isLandingRoute = location.pathname.startsWith('/landing');
 
   return (
     <ErrorBoundary>
-      {isCustomerRoute ? (
+      {isCustomerRoute || isAdminRoute || isLandingRoute ? (
         <Routes>
           <Route path="/customer/:tableId" element={<CustomerOrderPage />} />
+          <Route path="/admin/dashboard" element={<KpiDashboardPage />} />
+          <Route path="/landing" element={<LandingPage />} />
         </Routes>
       ) : (
         <PosLayout />
