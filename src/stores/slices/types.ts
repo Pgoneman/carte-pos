@@ -1,18 +1,21 @@
-import type { KitchenOrder, Menu, OrderItem, Reservation, Table } from '../../types';
+import type { KitchenOrder, Menu, OrderItem, OrderStatus, Reservation, Table } from '../../types';
 
 export interface UiSlice {
   loading: boolean;
   toastMessage: string | null;
+  realtimeRefreshTick: number;
   showToast: (message: string) => void;
 }
 
 export interface TableSlice {
   tables: Table[];
   selectedTableId: string | null;
+  todaySales: number;
   fetchTables: () => Promise<void>;
   selectTable: (id: string | null) => void;
   setTableOccupied: (id: string, guests: number) => Promise<void>;
   clearTable: (id: string) => Promise<void>;
+  fetchTodaySales: () => Promise<void>;
 }
 
 export interface MenuSlice {
@@ -25,23 +28,28 @@ export interface MenuSlice {
 
 export interface OrderSlice {
   currentOrder: OrderItem[];
+  serverOrders: OrderItem[];
   addToOrder: (item: Omit<OrderItem, 'quantity'>) => void;
   removeFromOrder: (menuId: string) => void;
   updateQuantity: (menuId: string, quantity: number) => void;
   clearOrder: () => void;
   submitOrder: () => Promise<void>;
   fetchTableOrders: (tableId: string) => Promise<void>;
-  processPayment: (method: string) => Promise<void>;
+  processPayment: (method: string) => Promise<boolean>;
+  processCustomerPayment: (method: string) => Promise<boolean>;
 }
 
 export interface KitchenSlice {
   kitchenOrders: KitchenOrder[];
+  completedItemIds: string[];
   fetchKitchenOrders: () => Promise<void>;
   completeOrder: (orderId: string) => Promise<void>;
   completeAllOrders: () => Promise<void>;
   setOrderReady: (orderId: string) => Promise<void>;
   setOrderServed: (orderId: string) => Promise<void>;
-  revertOrderStatus: (orderId: string, toStatus?: string) => Promise<void>;
+  revertOrderStatus: (orderId: string, toStatus?: OrderStatus) => Promise<void>;
+  markItemCompleted: (orderId: string, itemId: string) => void;
+  markItemUncompleted: (itemId: string) => void;
 }
 
 export interface SyncSlice {

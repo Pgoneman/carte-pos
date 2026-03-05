@@ -3,8 +3,19 @@ import { supabase } from '../../lib/supabase';
 import type { Menu } from '../../types';
 import type { MenuSlice, PosStore } from './types';
 
-type MenuRow = Menu & {
+type MenuDbRow = {
+  id: string | number;
+  name?: string | null;
+  name_ko?: string | null;
+  category_name?: string | null;
+  price?: number | null;
   is_active?: boolean | null;
+  is_ayce?: boolean | null;
+  is_ayce_pass?: boolean | null;
+  description?: string | null;
+  img?: string | null;
+  cal?: number | null;
+  popular?: boolean | null;
 };
 
 export const createMenuSlice: StateCreator<PosStore, [], [], MenuSlice> = (set, get) => ({
@@ -26,7 +37,7 @@ export const createMenuSlice: StateCreator<PosStore, [], [], MenuSlice> = (set, 
         return;
       }
 
-      const list = ((data ?? []) as unknown as MenuRow[]).filter(
+      const list = ((data ?? []) as unknown as MenuDbRow[]).filter(
         (menu) => menu.is_active !== false
       );
 
@@ -35,9 +46,16 @@ export const createMenuSlice: StateCreator<PosStore, [], [], MenuSlice> = (set, 
         if (!acc[category]) acc[category] = [];
         acc[category].push({
           id: String(menu.id),
-          name: menu.name,
-          category_name: category,
-          price: menu.price,
+          name: menu.name ?? '',
+          nameKo: menu.name_ko ?? undefined,
+          categoryName: category,
+          price: menu.price ?? 0,
+          isAyce: menu.is_ayce ?? false,
+          isAycePass: menu.is_ayce_pass ?? false,
+          description: menu.description ?? undefined,
+          cal: menu.cal ?? undefined,
+          img: menu.img ?? undefined,
+          popular: menu.popular ?? false,
         });
         return acc;
       }, {});

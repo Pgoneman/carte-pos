@@ -167,13 +167,13 @@ export default function ManagementDashboard({
                 <h1 className="text-xl font-bold text-gray-900 truncate">
                   바이오테크
                 </h1>
-                <a
-                  href="#"
+                <button
+                  type="button"
                   className="text-sm text-gray-500 flex items-center mt-1 hover:underline"
                 >
                   매장 페이지{' '}
                   <ChevronRight className="w-4 h-4 ml-0.5 shrink-0" />
-                </a>
+                </button>
               </div>
             </div>
 
@@ -232,8 +232,8 @@ export default function ManagementDashboard({
 
                       return (
                         <li key={itemIdx}>
-                          <a
-                            href="#"
+                          <button
+                            type="button"
                             className="text-gray-600 hover:text-blue-600 transition-colors font-medium flex items-center flex-wrap gap-1"
                           >
                             {text}
@@ -249,7 +249,7 @@ export default function ManagementDashboard({
                                 {badge}
                               </span>
                             )}
-                          </a>
+                          </button>
                         </li>
                       );
                     })}

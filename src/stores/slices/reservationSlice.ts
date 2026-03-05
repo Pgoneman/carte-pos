@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import { supabase } from '../../lib/supabase';
 import type { Reservation } from '../../types';
+import { getTodayUtcIsoStart } from '../../utils/dateUtils';
 import type { PosStore, ReservationSlice } from './types';
 
 type ReservationRow = {
@@ -28,14 +29,13 @@ export const createReservationSlice: StateCreator<
 
   fetchReservations: async () => {
     try {
-      // 오늘 자정(KST) 이후 예약만 조회
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      // KST 기준 오늘 자정 이후 예약만 조회 (kitchenSlice와 동일 방식)
+      const todayUtcStart = getTodayUtcIsoStart();
 
       const { data, error } = await supabase
         .from('reservations')
         .select('*')
-        .gte('reservation_date', todayStart.toISOString())
+        .gte('reservation_date', todayUtcStart)
         .order('reservation_date', { ascending: true });
 
       if (error) {
@@ -65,6 +65,7 @@ export const createReservationSlice: StateCreator<
 
   createReservation: async (payload) => {
     const { showToast, fetchReservations } = get();
+    set({ loading: true });
 
     const dbPayload = {
       customer_name: payload.customerName,
@@ -92,6 +93,8 @@ export const createReservationSlice: StateCreator<
       console.error('createReservation failed:', error);
       showToast('예약 등록에 실패했습니다.');
       return false;
+    } finally {
+      set({ loading: false });
     }
   },
 });

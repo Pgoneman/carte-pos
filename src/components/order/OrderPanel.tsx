@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { usePosStore } from '../../stores/posStore';
-import type { OrderItem } from '../../stores/posStore';
+import type { OrderItem, Menu } from '../../stores/posStore';
 
 /**
  * POS System UI - Supabase + posStore
@@ -46,10 +47,12 @@ const CategoryTabs = ({
 
 function OrderItemRow({
   item,
+  isIncluded,
   onUpdate,
   onRemove,
 }: {
   item: OrderItem;
+  isIncluded: boolean;
   onUpdate: (menuId: string, quantity: number) => void;
   onRemove: (menuId: string) => void;
 }) {
@@ -58,7 +61,7 @@ function OrderItemRow({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{item.name}</div>
         <div className="text-blue-600 text-sm">
-          {(item.price * item.quantity).toLocaleString()}원
+          {isIncluded ? 'AYCE 포함' : `${(item.price * item.quantity).toLocaleString()}원`}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -91,24 +94,52 @@ function OrderItemRow({
   );
 }
 
+function ServerOrderItemRow({ item, isIncluded }: { item: OrderItem; isIncluded: boolean }) {
+  return (
+    <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg mb-1">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium truncate text-gray-600">{item.name}</div>
+        <div className="text-green-600 text-xs">
+          {isIncluded ? 'AYCE 포함' : `${(item.price * item.quantity).toLocaleString()}원`}
+        </div>
+      </div>
+      <span className="w-8 text-center text-xs text-gray-500">x{item.quantity}</span>
+    </div>
+  );
+}
+
 function Sidebar({
   currentOrder,
+  serverOrders,
   removeFromOrder,
   updateQuantity,
   submitOrder,
   onPaymentClick,
   selectedTableId,
   loading,
+  hasAycePass,
+  allMenus,
 }: {
   currentOrder: OrderItem[];
+  serverOrders: OrderItem[];
   removeFromOrder: (menuId: string) => void;
   updateQuantity: (menuId: string, quantity: number) => void;
   submitOrder: () => void;
   onPaymentClick: () => void;
   selectedTableId: string | null;
   loading: boolean;
+  hasAycePass: boolean;
+  allMenus: Menu[];
 }) {
-  const total = currentOrder.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const isItemIncluded = (item: OrderItem) => {
+    if (!hasAycePass) return false;
+    const menu = allMenus.find((m) => m.id === item.menuId);
+    return menu?.isAyce === true;
+  };
+  const newTotal = currentOrder.reduce((sum, i) => sum + (isItemIncluded(i) ? 0 : i.price * i.quantity), 0);
+  const serverTotal = serverOrders.reduce((sum, i) => sum + (isItemIncluded(i) ? 0 : i.price * i.quantity), 0);
+  const isEmpty = currentOrder.length === 0 && serverOrders.length === 0;
+
   return (
     <div className="w-72 lg:w-80 flex-shrink-0 bg-white flex flex-col border-l border-gray-300 h-full relative">
       <div className="p-2 flex items-center justify-between border-b border-gray-100">
@@ -131,7 +162,7 @@ function Sidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 min-h-0">
-        {currentOrder.length === 0 ? (
+        {isEmpty ? (
           <div className="flex items-center justify-center h-full text-gray-300">
             <div className="text-center">
               <div className="text-4xl mb-2">📋</div>
@@ -139,23 +170,62 @@ function Sidebar({
             </div>
           </div>
         ) : (
-          <ul className="space-y-1">
-            {currentOrder.map((i) => (
-              <li key={i.menuId}>
-                <OrderItemRow
-                  item={i}
-                  onUpdate={updateQuantity}
-                  onRemove={removeFromOrder}
-                />
-              </li>
-            ))}
-          </ul>
+          <>
+            {/* 기존 주문 (서버, 읽기 전용) */}
+            {serverOrders.length > 0 && (
+              <div className="mb-3">
+                <div className="text-xs font-bold text-green-700 mb-1 px-1">
+                  기존 주문 ({serverOrders.length}건)
+                </div>
+                <ul className="space-y-0.5">
+                  {serverOrders.map((i) => (
+                    <li key={i.menuId}>
+                      <ServerOrderItemRow item={i} isIncluded={isItemIncluded(i)} />
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-xs text-green-600 font-medium text-right mt-1 px-1">
+                  소계: {serverTotal.toLocaleString()}원
+                </div>
+              </div>
+            )}
+
+            {/* 새 주문 (로컬, 편집 가능) */}
+            {currentOrder.length > 0 && (
+              <div>
+                {serverOrders.length > 0 && (
+                  <div className="text-xs font-bold text-blue-700 mb-1 px-1">
+                    새 주문 ({currentOrder.length}건)
+                  </div>
+                )}
+                <ul className="space-y-1">
+                  {currentOrder.map((i) => (
+                    <li key={i.menuId}>
+                      <OrderItemRow
+                        item={i}
+                        isIncluded={isItemIncluded(i)}
+                        onUpdate={updateQuantity}
+                        onRemove={removeFromOrder}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {currentOrder.length > 0 && (
-        <div className="px-2 py-1 border-t border-gray-200 text-sm font-bold text-gray-700">
-          합계: {total.toLocaleString()}원
+      {(currentOrder.length > 0 || serverOrders.length > 0) && (
+        <div className="px-2 py-1 border-t border-gray-200">
+          {currentOrder.length > 0 && (
+            <div className="text-sm font-bold text-blue-700">
+              새 주문: {newTotal.toLocaleString()}원
+            </div>
+          )}
+          <div className="text-sm font-bold text-gray-700">
+            총 합계: {(serverTotal + newTotal).toLocaleString()}원
+          </div>
         </div>
       )}
 
@@ -268,39 +338,76 @@ function PaymentModal({
   totalAmount,
   tableName,
   onConfirm,
+  isProcessing,
 }: {
   isOpen: boolean;
   onClose: () => void;
   totalAmount: number;
   tableName: string;
-  onConfirm: () => void;
+  onConfirm: (method: string) => void;
+  isProcessing: boolean;
 }) {
+  const [selectedMethod, setSelectedMethod] = useState<string>('card');
+
   if (!isOpen) return null;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && !isProcessing && onClose()}
       role="dialog"
       aria-modal="true"
     >
       <div className="bg-white rounded-xl w-96 p-6 shadow-xl text-gray-900">
         <h3 className="text-lg font-bold mb-4">결제</h3>
         <p className="text-sm text-gray-600 mb-1">테이블: {tableName}</p>
-        <p className="text-2xl font-bold mb-6">총액: {totalAmount.toLocaleString()}원</p>
+        <p className="text-2xl font-bold mb-5">총액: {totalAmount.toLocaleString()}원</p>
+
+        <div className="mb-5">
+          <p className="text-sm font-medium text-gray-600 mb-2">결제 수단</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedMethod('card')}
+              disabled={isProcessing}
+              className={`flex-1 py-3 rounded-lg font-bold text-sm border-2 transition-colors ${
+                selectedMethod === 'card'
+                  ? 'border-blue-500 bg-blue-50 text-blue-600'
+                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+              } disabled:opacity-50`}
+            >
+              카드
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedMethod('cash')}
+              disabled={isProcessing}
+              className={`flex-1 py-3 rounded-lg font-bold text-sm border-2 transition-colors ${
+                selectedMethod === 'cash'
+                  ? 'border-blue-500 bg-blue-50 text-blue-600'
+                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+              } disabled:opacity-50`}
+            >
+              현금
+            </button>
+          </div>
+        </div>
+
         <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200"
+            disabled={isProcessing}
+            className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             취소
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            className="flex-1 py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600"
+            onClick={() => onConfirm(selectedMethod)}
+            disabled={isProcessing}
+            className="flex-1 py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            결제 완료
+            {isProcessing ? '처리 중...' : '결제 완료'}
           </button>
         </div>
       </div>
@@ -311,6 +418,7 @@ function PaymentModal({
 export default function OrderPanel() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const navigate = useNavigate();
   const {
     tables,
@@ -319,6 +427,7 @@ export default function OrderPanel() {
     categories,
     menus,
     currentOrder,
+    serverOrders,
     addToOrder,
     removeFromOrder,
     updateQuantity,
@@ -329,21 +438,55 @@ export default function OrderPanel() {
     fetchTableOrders,
     processPayment,
     showToast,
-  } = usePosStore();
+  } = usePosStore(
+    useShallow((s) => ({
+      tables: s.tables,
+      selectedTableId: s.selectedTableId,
+      selectedCategory: s.selectedCategory,
+      categories: s.categories,
+      menus: s.menus,
+      currentOrder: s.currentOrder,
+      serverOrders: s.serverOrders,
+      addToOrder: s.addToOrder,
+      removeFromOrder: s.removeFromOrder,
+      updateQuantity: s.updateQuantity,
+      submitOrder: s.submitOrder,
+      selectCategory: s.selectCategory,
+      fetchMenus: s.fetchMenus,
+      fetchTables: s.fetchTables,
+      fetchTableOrders: s.fetchTableOrders,
+      processPayment: s.processPayment,
+      showToast: s.showToast,
+    }))
+  );
 
+  // 테이블/메뉴는 마운트 시 1회만 조회
+  useEffect(() => {
+    fetchTables();
+    fetchMenus();
+  }, [fetchTables, fetchMenus]);
+
+  // selectedTableId 변경 시 해당 테이블 주문만 조회 (없으면 리다이렉트)
   useEffect(() => {
     if (!selectedTableId) {
       navigate('/');
       return;
     }
-    fetchTables();
-    fetchMenus();
     fetchTableOrders(selectedTableId);
-  }, [selectedTableId, navigate, fetchTables, fetchMenus, fetchTableOrders]);
+  }, [selectedTableId, navigate, fetchTableOrders]);
 
   const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null;
   const totalAmount = selectedTable?.totalAmount ?? 0;
-  const menuList = (menus[selectedCategory || ''] || []) as { id: string; name: string; category_name?: string; price: number }[];
+  const menuList = (menus[selectedCategory || ''] || []) as { id: string; name: string; categoryName?: string; price: number }[];
+
+  // AYCE 이용권 감지 (serverOrders + currentOrder에서 패스 아이템 체크)
+  const allMenus = useMemo(() => Object.values(menus).flat(), [menus]);
+  const hasAycePass = useMemo(() => {
+    return [...currentOrder, ...serverOrders].some((item) => {
+      const menu = allMenus.find((m) => m.id === item.menuId);
+      return menu?.isAycePass === true;
+    });
+  }, [currentOrder, serverOrders, allMenus]);
 
   const handleSubmitOrder = async () => {
     if (currentOrder.length === 0) {
@@ -364,12 +507,18 @@ export default function OrderPanel() {
     setPaymentModalOpen(true);
   };
 
-  const handlePaymentConfirm = async () => {
-    if (!selectedTableId) return;
-    await processPayment('card');
-    showToast('결제가 완료되었습니다');
-    setPaymentModalOpen(false);
-    navigate('/');
+  const handlePaymentConfirm = async (method: string) => {
+    if (!selectedTableId || isProcessingPayment) return;
+    setIsProcessingPayment(true);
+    try {
+      const success = await processPayment(method);
+      if (!success) return;
+      showToast('결제가 완료되었습니다');
+      setPaymentModalOpen(false);
+      navigate('/');
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   return (
@@ -378,12 +527,20 @@ export default function OrderPanel() {
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* 상단: 선택된 테이블 정보 */}
           <div className="bg-gray-100 p-4 mb-0 rounded-none border-b border-gray-300 shrink-0">
-            <span className="font-bold text-lg">
-              {selectedTable?.name} - {selectedTable?.guests ?? 0}명
-            </span>
-            <span className="ml-4 text-gray-600">
-              {(selectedTable?.totalAmount ?? 0).toLocaleString()}원
-            </span>
+            {selectedTable ? (
+              <>
+                <span className="font-bold text-lg">
+                  {selectedTable.name} - {selectedTable.guests ?? 0}명
+                </span>
+                <span className="ml-4 text-gray-600">
+                  {(selectedTable.totalAmount ?? 0).toLocaleString()}원
+                </span>
+              </>
+            ) : (
+              <span className="font-bold text-lg text-gray-400">
+                테이블 로딩 중...
+              </span>
+            )}
           </div>
 
           <CategoryTabs
@@ -432,12 +589,15 @@ export default function OrderPanel() {
 
         <Sidebar
           currentOrder={currentOrder}
+          serverOrders={serverOrders}
           removeFromOrder={removeFromOrder}
           updateQuantity={updateQuantity}
           submitOrder={handleSubmitOrder}
           onPaymentClick={handlePaymentClick}
           selectedTableId={selectedTableId}
           loading={isSubmitting}
+          hasAycePass={hasAycePass}
+          allMenus={allMenus}
         />
       </div>
 
@@ -447,6 +607,7 @@ export default function OrderPanel() {
         totalAmount={totalAmount}
         tableName={selectedTable?.name ?? ''}
         onConfirm={handlePaymentConfirm}
+        isProcessing={isProcessingPayment}
       />
     </div>
   );

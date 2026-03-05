@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { usePosStore } from '../../stores/posStore';
 import {
   ChevronLeft,
@@ -168,6 +168,32 @@ export default function ReservationCalendar() {
   const timeTopPx = currentTime.getHours() * 64 + (currentTime.getMinutes() / 60) * 64;
   const timeLabel = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
 
+  // 현재 주에 해당하는 예약만 필터링
+  const weekReservations = useMemo(() => {
+    const wEnd = new Date(weekStart);
+    wEnd.setDate(wEnd.getDate() + 7);
+    return reservations.filter((r) => {
+      const d = new Date(r.reservationDate);
+      return d >= weekStart && d < wEnd && r.status !== 'cancelled';
+    });
+  }, [reservations, weekStart]);
+
+  // 요일별(0~6) 그룹핑
+  const reservationsByDay = useMemo(() => {
+    const byDay: Record<number, typeof reservations> = {};
+    weekReservations.forEach((r) => {
+      const d = new Date(r.reservationDate);
+      const dayIdx = Math.floor(
+        (d.getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000)
+      );
+      if (dayIdx >= 0 && dayIdx < 7) {
+        if (!byDay[dayIdx]) byDay[dayIdx] = [];
+        byDay[dayIdx].push(r);
+      }
+    });
+    return byDay;
+  }, [weekReservations, weekStart]);
+
   const handlePrevMonth = () =>
     setViewMonth(({ year, month }) =>
       month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 }
@@ -246,14 +272,17 @@ export default function ReservationCalendar() {
             </div>
 
             <div className="grid grid-cols-7 text-center gap-y-1">
-              {calendarDates.flat().map((day, idx) => {
+              {calendarDates.flat().map((day) => {
                 const isSelected = day.isCurrentMonth && isSameDay(day.fullDate, selectedDate);
                 const isToday = day.isCurrentMonth && isSameDay(day.fullDate, today);
-                const isSun = idx % 7 === 0;
+                const isSun = day.fullDate.getDay() === 0;
                 return (
-                  <div key={idx} className="flex items-center justify-center h-8">
+                  <div key={day.fullDate.toISOString()} className="flex items-center justify-center h-8">
                     <span
                       onClick={() => handleDayClick(day)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleDayClick(day)}
+                      role="button"
+                      tabIndex={0}
                       className={`text-xs w-7 h-7 flex items-center justify-center rounded-full cursor-pointer transition-colors ${
                         !day.isCurrentMonth
                           ? 'text-gray-300'
@@ -293,7 +322,7 @@ export default function ReservationCalendar() {
               </button>
               <h2 className="text-base font-bold">
                 {formatWeekRange(weekStart)}{' '}
-                <span className="text-gray-400 font-normal ml-1">총 {reservations.length}건</span>
+                <span className="text-gray-400 font-normal ml-1">총 {weekReservations.length}건</span>
               </h2>
               <button className="text-gray-400 hover:text-gray-600" type="button" onClick={handleNextWeek}>
                 <ChevronRight className="w-5 h-5" />
@@ -326,8 +355,8 @@ export default function ReservationCalendar() {
               {/* Day Headers */}
               <div className="flex border-b border-gray-200 bg-white sticky top-0 z-20">
                 <div className="w-20 shrink-0" />
-                {weekHeader.map((item, idx) => (
-                  <div key={idx} className="flex-1 py-3 text-center border-l border-gray-100">
+                {weekHeader.map((item) => (
+                  <div key={item.date} className="flex-1 py-3 text-center border-l border-gray-100">
                     <span className={`text-xs font-medium ${item.color}`}>
                       {item.date} {item.day}
                     </span>
@@ -354,6 +383,22 @@ export default function ReservationCalendar() {
                           className="h-16 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
                         />
                       ))}
+                      {(reservationsByDay[colIdx] ?? []).map((r) => {
+                        const d = new Date(r.reservationDate);
+                        const topPx = d.getHours() * 64 + (d.getMinutes() / 60) * 64;
+                        const timeStr = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+                        return (
+                          <div
+                            key={r.id}
+                            className="absolute left-0.5 right-0.5 rounded bg-blue-100 border-l-2 border-blue-500 px-1.5 py-0.5 text-xs overflow-hidden cursor-pointer hover:bg-blue-200 transition-colors z-10"
+                            style={{ top: `${topPx}px`, height: '60px' }}
+                            title={`${r.customerName} ${r.guests}명 ${timeStr}`}
+                          >
+                            <div className="font-bold text-blue-800 truncate">{r.customerName}</div>
+                            <div className="text-blue-600 truncate">{r.guests}명 · {timeStr}</div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
 

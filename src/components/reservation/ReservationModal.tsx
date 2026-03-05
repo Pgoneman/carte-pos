@@ -59,6 +59,7 @@ export default function ReservationModal({
   onClose,
 }: ReservationModalProps) {
   const [selectedPeople, setSelectedPeople] = useState(0);
+  const [customGuests, setCustomGuests] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [reservationDate, setReservationDate] = useState<Date>(getDefaultReservationDate);
@@ -78,9 +79,16 @@ export default function ReservationModal({
     setReservationDate(next);
   };
 
+  const isCustomInput = selectedPeople === peopleCounts.length - 1;
+  const guestsCount = isCustomInput ? Number(customGuests) || 0 : selectedPeople + 1;
+
   const handleRegister = async () => {
     if (!customerName.trim() || !phoneNumber.trim()) {
       alert('예약자 이름과 연락처를 입력해주세요.');
+      return;
+    }
+    if (guestsCount <= 0) {
+      alert('인원 수를 입력해주세요.');
       return;
     }
 
@@ -88,7 +96,7 @@ export default function ReservationModal({
       customerName,
       phoneNumber,
       reservationDate: reservationDate.toISOString(),
-      guests: selectedPeople + 1,
+      guests: guestsCount,
       tableId: null,
     });
 
@@ -96,6 +104,7 @@ export default function ReservationModal({
       setCustomerName('');
       setPhoneNumber('');
       setSelectedPeople(0);
+      setCustomGuests('');
       setReservationDate(getDefaultReservationDate());
       onClose();
     }
@@ -215,6 +224,19 @@ export default function ReservationModal({
                 </button>
               ))}
             </div>
+            {isCustomInput && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  value={customGuests}
+                  onChange={(e) => setCustomGuests(e.target.value)}
+                  placeholder="인원 수 입력"
+                  className="w-32 px-3 py-2 text-sm border border-blue-300 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                />
+                <span className="text-sm text-gray-500">명</span>
+              </div>
+            )}
           </div>
 
           {/* 테이블 */}

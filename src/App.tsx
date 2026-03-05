@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import Header from './components/common/Header';
 import Toast from './components/common/Toast';
 import { PageTransition } from './components/common/PageTransition';
@@ -10,9 +11,11 @@ import StatusPage from './pages/StatusPage';
 import TakeoutPage from './pages/TakeoutPage';
 import ReservationPage from './pages/ReservationPage';
 import SettingsPage from './pages/SettingsPage';
+import CustomerOrderPage from './pages/CustomerOrderPage';
+import DebugOverlay from './components/common/DebugOverlay';
 import { usePosStore } from './stores/posStore';
 
-function App() {
+function PosLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [forceSettingsClosed, setForceSettingsClosed] = useState(false);
   const location = useLocation();
@@ -21,7 +24,6 @@ function App() {
   const stopRealtimeSync = usePosStore((s) => s.stopRealtimeSync);
   const isSettingsRoute = location.pathname === '/settings';
 
-  // 라우트 변경 시 수동 닫힘 플래그 초기화
   useEffect(() => {
     setForceSettingsClosed(false);
   }, [location.pathname]);
@@ -61,6 +63,24 @@ function App() {
         }}
       />
     </div>
+  );
+}
+
+function App() {
+  const location = useLocation();
+  const isCustomerRoute = location.pathname.startsWith('/customer');
+
+  return (
+    <ErrorBoundary>
+      {isCustomerRoute ? (
+        <Routes>
+          <Route path="/customer/:tableId" element={<CustomerOrderPage />} />
+        </Routes>
+      ) : (
+        <PosLayout />
+      )}
+      <DebugOverlay />
+    </ErrorBoundary>
   );
 }
 

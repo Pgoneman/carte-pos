@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { usePosStore } from '../../stores/posStore';
 import type { Table } from '../../stores/posStore';
 import { TakeoutContent } from '../takeout/TakeoutDashboard';
@@ -14,34 +15,54 @@ import { useElapsedTime } from '../../hooks/useElapsedTime';
 
 
 const TableCard = ({
+  id,
   name,
   status,
   startTime,
   guests,
   totalAmount,
   onClick,
+  onClear,
 }: {
+  id: string;
   name: string;
   status: Table['status'];
   startTime?: Date;
   guests?: number;
   totalAmount?: number;
   onClick?: () => void;
+  onClear?: () => void;
 }) => {
   const isOccupied = status === 'occupied';
+  const isPaid = status === 'paid';
   const time = useElapsedTime(isOccupied ? startTime : undefined);
 
   const baseClasses =
-    'w-48 h-28 rounded-sm p-3 flex flex-col justify-between shadow-sm transition-all cursor-pointer hover:scale-105';
+    'w-full h-28 rounded-sm p-3 flex flex-col justify-between shadow-sm transition-all cursor-pointer hover:scale-105 relative';
 
   let statusClasses = '';
-  if (status === 'occupied') {
+  if (status === 'paid') {
+    statusClasses = 'bg-green-500 text-white';
+  } else if (status === 'occupied') {
     statusClasses = 'bg-red-500 text-white';
   } else if (status === 'empty') {
     statusClasses = 'bg-white border-2 border-blue-400 text-gray-500';
   } else if (status === 'reserved') {
     statusClasses = 'bg-white border-2 border-orange-400 text-gray-500';
   }
+
+  const handleCustomerLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(`/customer/${id}`, '_blank');
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onClear) {
+      const confirmed = window.confirm(`${name} 테이블을 초기화하시겠습니까?\n(주문 내역과 금액이 모두 삭제됩니다)`);
+      if (confirmed) onClear();
+    }
+  };
 
   return (
     <div
@@ -51,9 +72,35 @@ const TableCard = ({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
     >
+      {/* Top-right buttons */}
+      <div className="absolute top-1 right-1 flex gap-1 z-10">
+        {(isOccupied || isPaid) && (
+          <button
+            type="button"
+            onClick={handleClear}
+            title="테이블 초기화"
+            className="w-6 h-6 rounded flex items-center justify-center text-xs opacity-60 hover:opacity-100 transition-opacity bg-white/20 text-white hover:bg-white/40"
+          >
+            ✕
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleCustomerLink}
+          title="고객 주문 화면 열기"
+          className={`w-6 h-6 rounded flex items-center justify-center text-xs opacity-60 hover:opacity-100 transition-opacity ${
+            isOccupied || isPaid
+              ? 'bg-white/20 text-white hover:bg-white/40'
+              : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+          }`}
+        >
+          QR
+        </button>
+      </div>
+
       <div className="flex justify-between items-start">
         <span
-          className={`text-sm font-bold ${isOccupied ? 'text-white' : 'text-gray-500 w-full text-center mt-2'}`}
+          className={`text-sm font-bold ${isOccupied || isPaid ? 'text-white' : 'text-gray-500 w-full text-center mt-2'}`}
         >
           {name}
         </span>
@@ -65,6 +112,13 @@ const TableCard = ({
       {isOccupied && (
         <div className="flex justify-between items-end">
           <span className="text-xs font-medium">{guests ?? 0}명</span>
+          <span className="text-base font-bold">{(totalAmount ?? 0).toLocaleString()}원</span>
+        </div>
+      )}
+
+      {isPaid && (
+        <div className="flex justify-between items-end">
+          <span className="text-xs font-bold">결제완료</span>
           <span className="text-base font-bold">{(totalAmount ?? 0).toLocaleString()}원</span>
         </div>
       )}
@@ -181,11 +235,22 @@ export default function TableOverview() {
   const [selectedTableForModal, setSelectedTableForModal] = useState<Table | null>(null);
   const [isNumberpadOpen, setIsNumberpadOpen] = useState(false);
   const navigate = useNavigate();
-  const { tables, fetchTables, setTableOccupied, selectTable } = usePosStore();
+  const { tables, fetchTables, setTableOccupied, selectTable, clearTable, todaySales, fetchTodaySales } = usePosStore(
+    useShallow((s) => ({
+      tables: s.tables,
+      fetchTables: s.fetchTables,
+      setTableOccupied: s.setTableOccupied,
+      selectTable: s.selectTable,
+      clearTable: s.clearTable,
+      todaySales: s.todaySales,
+      fetchTodaySales: s.fetchTodaySales,
+    }))
+  );
 
   useEffect(() => {
     fetchTables();
-  }, [fetchTables]);
+    fetchTodaySales();
+  }, [fetchTables, fetchTodaySales]);
 
   const hallTables = [...tables.filter((t) => t.type === 'hall')].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { numeric: true })
@@ -195,7 +260,7 @@ export default function TableOverview() {
     if (table.status === 'empty') {
       setSelectedTableForModal(table);
       setIsNumberpadOpen(true);
-    } else if (table.status === 'occupied') {
+    } else if (table.status === 'occupied' || table.status === 'paid') {
       selectTable(table.id);
       navigate('/order');
     }
@@ -212,6 +277,7 @@ export default function TableOverview() {
   };
 
   const occupiedCount = hallTables.filter((t) => t.status === 'occupied').length;
+  const paidCount = hallTables.filter((t) => t.status === 'paid').length;
   const reservedCount = hallTables.filter((t) => t.status === 'reserved').length;
   const emptyCount = hallTables.filter((t) => t.status === 'empty').length;
   const totalGuests = hallTables
@@ -224,11 +290,15 @@ export default function TableOverview() {
 
       {activeTab === 'hall' && (
         <>
-          <div className="flex-1 relative p-8">
-            <div className="absolute top-4 left-4 flex gap-4 text-xs">
+          <div className="flex-1 relative p-6 overflow-y-auto">
+            <div className="flex gap-4 text-xs mb-4">
               <div className="flex items-center gap-1">
                 <div className="w-4 h-4 bg-red-500 rounded" />
                 <span>사용중</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-green-500 rounded" />
+                <span>결제완료</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-4 h-4 bg-white border-2 border-orange-400 rounded" />
@@ -240,24 +310,24 @@ export default function TableOverview() {
               </div>
             </div>
 
-            <div className="flex justify-center mt-12">
-              <div className="grid grid-cols-3 gap-6 max-w-2xl">
-                {hallTables.map((t) => (
-                  <TableCard
-                    key={t.id}
-                    name={t.name}
-                    status={t.status}
-                    startTime={t.startTime}
-                    guests={t.guests}
-                    totalAmount={t.totalAmount}
-                    onClick={() => handleTableClick(t)}
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {hallTables.map((t) => (
+                <TableCard
+                  key={t.id}
+                  id={t.id}
+                  name={t.name}
+                  status={t.status}
+                  startTime={t.startTime}
+                  guests={t.guests}
+                  totalAmount={t.totalAmount}
+                  onClick={() => handleTableClick(t)}
+                  onClear={() => clearTable(t.id)}
+                />
+              ))}
             </div>
 
             <div
-              className="absolute bottom-8 right-8 animate-bounce"
+              className="fixed bottom-20 right-8 animate-bounce z-10"
               style={{ animationDuration: '2s' }}
             >
               <ChickMascot />
@@ -273,14 +343,22 @@ export default function TableOverview() {
                 사용중: <strong className="text-red-400">{occupiedCount}</strong>
               </span>
               <span>
+                결제완료: <strong className="text-green-400">{paidCount}</strong>
+              </span>
+              <span>
                 예약: <strong className="text-orange-400">{reservedCount}</strong>
               </span>
               <span>
                 빈 테이블: <strong className="text-blue-400">{emptyCount}</strong>
               </span>
             </div>
-            <div>
-              총 손님: <strong>{totalGuests}명</strong>
+            <div className="flex gap-8">
+              <span>
+                총 손님: <strong>{totalGuests}명</strong>
+              </span>
+              <span>
+                오늘 매출: <strong className="text-green-400">{todaySales.toLocaleString()}원</strong>
+              </span>
             </div>
           </div>
 

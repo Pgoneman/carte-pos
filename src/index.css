@@ -1,4 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --color-brand-red: #E8341A;
+  --color-brand-red-light: #FF6B3D;
+  --color-brand-dark: #1A0F0A;
+  --color-brand-cream: #F5F0EB;
+  --color-brand-warm: #4A3728;
+  --color-brand-muted: #9A8070;
+  --color-brand-light: #FFF3EE;
+  --color-brand-brown: #2A1A10;
+  --color-brand-brown-light: #B89880;
+  --font-display: 'DM Serif Display', serif;
+  --font-body: 'DM Sans', sans-serif;
+}
 
 body {
   margin: 0;

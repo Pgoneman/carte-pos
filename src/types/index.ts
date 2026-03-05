@@ -3,11 +3,10 @@ export interface Table {
     id: string;
     name: string;
     type: 'hall' | 'takeout' | 'delivery' | 'waiting';
-    status: 'empty' | 'occupied' | 'reserved';
+    status: 'empty' | 'occupied' | 'reserved' | 'paid';
     guests?: number;
     startTime?: Date;
     totalAmount?: number;
-    orders?: { id: string; items: { name: string; quantity: number }[] }[];
 }
 
 export interface OrderItem {
@@ -15,24 +14,42 @@ export interface OrderItem {
     name: string;
     price: number;
     quantity: number;
+    metadata?: Record<string, unknown>;
 }
 
+// 주문 상태 유니온 타입
+export type OrderStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'completed' | 'cancelled';
+
 // 주방 현황용 (Supabase orders + order_items 매핑)
+export interface KitchenOrderItem {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+}
+
 export interface KitchenOrder {
     id: string;
     tableId: string;
-    status: string;
-    total_amount: number;
+    status: OrderStatus;
+    totalAmount: number;
     createdAt: Date;
-    items: { name: string; price: number; quantity: number }[];
+    items: KitchenOrderItem[];
 }
 
 // 메뉴 (Supabase menus)
 export interface Menu {
     id: string;
     name: string;
-    category_name: string;
+    nameKo?: string;
+    categoryName: string;
     price: number;
+    isAyce?: boolean;
+    isAycePass?: boolean;
+    description?: string;
+    cal?: number;
+    img?: string;
+    popular?: boolean;
 }
 
 export * from './reservation';

@@ -1,21 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePosStore } from '../../stores/posStore';
 import type { Table } from '../../stores/posStore';
+import { useElapsedTime } from '../../hooks/useElapsedTime';
 
 /**
  * POS Dashboard - Takeout / Delivery / Waiting, connected to posStore
  * Slot click → selectTable → /order. Display orders, amount, elapsed time.
  */
-
-function formatElapsed(startTime?: Date): string {
-  if (!startTime) return '0:00';
-  const sec = Math.floor((Date.now() - startTime.getTime()) / 1000);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function OrderCard({
   table,
@@ -26,7 +20,8 @@ function OrderCard({
 }) {
   const isEmpty = table.status === 'empty' && (table.totalAmount ?? 0) === 0;
   const type = table.type;
-  const timer = table.startTime ? formatElapsed(table.startTime) : null;
+  const elapsed = useElapsedTime(!isEmpty ? table.startTime : undefined);
+  const timer = !isEmpty && table.startTime ? elapsed : null;
   const totalPrice = table.totalAmount ?? 0;
 
   const getBorderColor = () => {
@@ -181,7 +176,9 @@ const ChickMascot = () => {
 /** 본문만 노출 (테이블 페이지 탭 전환 시 재사용) */
 export function TakeoutContent() {
   const navigate = useNavigate();
-  const { tables, selectTable } = usePosStore();
+  const { tables, selectTable, todaySales } = usePosStore(
+    useShallow((s) => ({ tables: s.tables, selectTable: s.selectTable, todaySales: s.todaySales }))
+  );
 
   const takeoutTables = tables.filter((t) => t.type === 'takeout');
   const deliveryTables = tables.filter((t) => t.type === 'delivery');
@@ -195,10 +192,6 @@ export function TakeoutContent() {
   const takeoutOccupied = takeoutTables.filter((t) => (t.totalAmount ?? 0) > 0).length;
   const deliveryOccupied = deliveryTables.filter((t) => (t.totalAmount ?? 0) > 0).length;
   const waitingOccupied = waitingTables.filter((t) => (t.totalAmount ?? 0) > 0).length;
-  const totalSales = [...takeoutTables, ...deliveryTables, ...waitingTables].reduce(
-    (sum, t) => sum + (t.totalAmount ?? 0),
-    0
-  );
 
   return (
     <>
@@ -253,7 +246,7 @@ export function TakeoutContent() {
           </span>
         </div>
         <div>
-          총 매출: <strong>{totalSales.toLocaleString()}원</strong>
+          오늘 매출: <strong>{todaySales.toLocaleString()}원</strong>
         </div>
       </div>
     </>

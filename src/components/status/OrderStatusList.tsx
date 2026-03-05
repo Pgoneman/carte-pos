@@ -5,8 +5,10 @@ import {
   Settings,
   ChevronRight,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePosStore } from '../../stores/posStore';
 import type { KitchenOrder } from '../../stores/posStore';
+import type { OrderStatus } from '../../types';
 import { useTimeAgo } from '../../hooks/useElapsedTime';
 
 /**
@@ -70,17 +72,23 @@ function OrderCard({
   onServed,
   onComplete,
   onRevert,
+  completedItemIds,
+  onItemToggle,
 }: {
   order: KitchenOrder;
   onReady: (id: string) => void;
   onServed: (id: string) => void;
   onComplete: (id: string) => void;
-  onRevert: (id: string, toStatus: string) => void;
+  onRevert: (id: string, toStatus: OrderStatus) => void;
+  completedItemIds: string[];
+  onItemToggle: (orderId: string, itemId: string, completed: boolean) => void;
 }) {
   const style = getOrderStyle(order.status);
   const isCancelled = order.status === 'cancelled';
   const isCompleted = order.status === 'completed';
+  const isActive = !isCancelled && !isCompleted;
   const timeAgo = useTimeAgo(order.createdAt);
+  const doneCount = isActive ? order.items.filter((item) => completedItemIds.includes(item.id)).length : 0;
 
   return (
     <div className="w-72 bg-white rounded-lg shadow-md overflow-hidden">
@@ -94,18 +102,38 @@ function OrderCard({
             <ChevronRight size={14} className="ml-0.5" />
           </span>
         </div>
-        <span className={`${style.timeColor} text-xs font-medium`}>
-          {timeAgo}
-        </span>
+        <div className="flex items-center gap-2">
+          {isActive && order.items.length > 0 && (
+            <span className="text-xs font-medium text-gray-500">{doneCount}/{order.items.length}</span>
+          )}
+          <span className={`${style.timeColor} text-xs font-medium`}>
+            {timeAgo}
+          </span>
+        </div>
       </div>
 
       <div className="p-4 min-h-[140px]">
-        {order.items.map((item, idx) => (
-          <div key={idx} className="flex mb-2.5">
-            <span className="font-bold text-gray-800 w-6">{item.quantity}</span>
-            <span className="text-gray-800">{item.name}</span>
-          </div>
-        ))}
+        {order.items.map((item) => {
+          const isDone = completedItemIds.includes(item.id);
+          return (
+            <div
+              key={item.id}
+              className={`flex items-center mb-2.5 ${isActive ? 'cursor-pointer hover:bg-gray-50 -mx-1 px-1 rounded' : ''}`}
+              onClick={() => isActive && onItemToggle(order.id, item.id, !isDone)}
+              onKeyDown={(e) => e.key === 'Enter' && isActive && onItemToggle(order.id, item.id, !isDone)}
+              role={isActive ? 'button' : undefined}
+              tabIndex={isActive ? 0 : undefined}
+            >
+              {isActive && (
+                <span className={`w-4 h-4 rounded border mr-2 flex items-center justify-center shrink-0 text-xs ${isDone ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300'}`}>
+                  {isDone && '✓'}
+                </span>
+              )}
+              <span className={`font-bold w-6 ${isDone ? 'text-gray-400' : 'text-gray-800'}`}>{item.quantity}</span>
+              <span className={isDone ? 'text-gray-400 line-through' : 'text-gray-800'}>{item.name}</span>
+            </div>
+          );
+        })}
       </div>
 
       {!isCancelled && !isCompleted && (
@@ -139,7 +167,7 @@ function OrderCard({
               </button>
               <button
                 type="button"
-                onClick={() => onRevert(order.id, 'ready' as string)}
+                onClick={() => onRevert(order.id, 'ready')}
                 className="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 rounded-md transition-colors"
               >
                 완료취소
@@ -154,6 +182,7 @@ function OrderCard({
 
 export default function OrderStatusList() {
   const [activeTab, setActiveTab] = useState<string>('pending');
+  const [showConfirmAll, setShowConfirmAll] = useState(false);
   const {
     kitchenOrders,
     fetchKitchenOrders,
@@ -162,7 +191,31 @@ export default function OrderStatusList() {
     completeOrder,
     revertOrderStatus,
     completeAllOrders,
-  } = usePosStore();
+    completedItemIds,
+    markItemCompleted,
+    markItemUncompleted,
+  } = usePosStore(
+    useShallow((s) => ({
+      kitchenOrders: s.kitchenOrders,
+      fetchKitchenOrders: s.fetchKitchenOrders,
+      setOrderReady: s.setOrderReady,
+      setOrderServed: s.setOrderServed,
+      completeOrder: s.completeOrder,
+      revertOrderStatus: s.revertOrderStatus,
+      completeAllOrders: s.completeAllOrders,
+      completedItemIds: s.completedItemIds,
+      markItemCompleted: s.markItemCompleted,
+      markItemUncompleted: s.markItemUncompleted,
+    }))
+  );
+
+  const handleItemToggle = (orderId: string, itemId: string, completed: boolean) => {
+    if (completed) {
+      markItemCompleted(orderId, itemId);
+    } else {
+      markItemUncompleted(itemId);
+    }
+  };
 
   useEffect(() => {
     fetchKitchenOrders();
@@ -212,7 +265,7 @@ export default function OrderStatusList() {
           <button
             className="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
             type="button"
-            onClick={completeAllOrders}
+            onClick={() => setShowConfirmAll(true)}
           >
             전체완료
           </button>
@@ -232,6 +285,8 @@ export default function OrderStatusList() {
               onServed={(id) => setOrderServed(id)}
               onComplete={(id) => completeOrder(id)}
               onRevert={(id, toStatus) => revertOrderStatus(id, toStatus)}
+              completedItemIds={completedItemIds}
+              onItemToggle={handleItemToggle}
             />
           ))}
 
@@ -246,6 +301,36 @@ export default function OrderStatusList() {
           <ChickMascot />
         </div>
       </main>
+
+      {showConfirmAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-80 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">전체 완료 확인</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              오늘의 모든 진행 중인 주문({kitchenOrders.filter((o) => ['pending', 'cooking', 'ready', 'served'].includes(o.status)).length}건)을 완료 처리합니다. 계속하시겠습니까?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="flex-1 py-2 rounded-md bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition-colors"
+                onClick={() => setShowConfirmAll(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="flex-1 py-2 rounded-md bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors"
+                onClick={async () => {
+                  setShowConfirmAll(false);
+                  await completeAllOrders();
+                }}
+              >
+                전체 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="h-10 bg-gray-800 text-white flex items-center justify-between px-4 text-sm shrink-0">
         <div className="flex gap-6">

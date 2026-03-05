@@ -1,7 +1,12 @@
 import type { StateCreator } from 'zustand';
 import { supabase } from '../../lib/supabase';
 import type { Table } from '../../types';
+import { getTodayUtcIsoStart } from '../../utils/dateUtils';
 import type { PosStore, TableSlice } from './types';
+
+type PaymentAmountRow = {
+  amount?: number | null;
+};
 
 type TableRow = {
   id: string | number;
@@ -22,13 +27,13 @@ function mapTableRow(row: TableRow): Table {
     guests: row.guests ?? undefined,
     startTime: row.start_time ? new Date(row.start_time) : undefined,
     totalAmount: row.total_amount ?? 0,
-    orders: [],
   };
 }
 
 export const createTableSlice: StateCreator<PosStore, [], [], TableSlice> = (set, get) => ({
   tables: [],
   selectedTableId: null,
+  todaySales: 0,
 
   fetchTables: async () => {
     set({ loading: true });
@@ -91,14 +96,36 @@ export const createTableSlice: StateCreator<PosStore, [], [], TableSlice> = (set
         return;
       }
 
-      set((state) => ({
-        selectedTableId: state.selectedTableId === id ? null : state.selectedTableId,
-        currentOrder: state.selectedTableId === id ? [] : state.currentOrder,
-      }));
+      const isSelected = get().selectedTableId === id;
+      if (isSelected) {
+        get().clearOrder();
+        set({ selectedTableId: null });
+      }
       await get().fetchTables();
     } catch (error) {
       console.error('clearTable failed:', error);
       get().showToast('테이블 초기화에 실패했습니다.');
+    }
+  },
+
+  fetchTodaySales: async () => {
+    try {
+      const todayUtcStart = getTodayUtcIsoStart();
+      const { data, error } = await supabase
+        .from('payments')
+        .select('amount')
+        .gte('created_at', todayUtcStart);
+
+      if (error) {
+        console.error('fetchTodaySales failed:', error);
+        return;
+      }
+
+      const rows = (data ?? []) as unknown as PaymentAmountRow[];
+      const total = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
+      set({ todaySales: total });
+    } catch (error) {
+      console.error('fetchTodaySales failed:', error);
     }
   },
 });
